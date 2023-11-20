@@ -1,7 +1,10 @@
 import os
-from typing import Union
+import subprocess
+from typing import NamedTuple, Sequence, Union
 
-from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+
+from PIL import Image, ImageDraw, ImageFont, ImageMath
 
 
 def pathstr(*s: str) -> str:
@@ -10,6 +13,78 @@ def pathstr(*s: str) -> str:
 
 def char2code(char):
     return format(ord(char), "#07x")[len("0x"):]
+
+
+def generate_image_from_svg(svg: str, png_size: tuple[int, int], background: str):
+    from uuid import uuid4
+
+    tmp_filename = f"tmp_{uuid4()}"
+
+    svg_filename = f"{tmp_filename}.svg"
+    with open(svg_filename, "w") as f:
+        print(svg, file=f)
+
+    png_filename = f"{tmp_filename}.png"
+    subprocess.run([
+        "convert",
+        "-background", background,
+        "-resize", f"{png_size[0]}x{png_size[1]}",
+        svg_filename, png_filename,
+    ], check=True)
+    
+    with Image.open(png_filename) as png:
+        png = png.copy()
+    
+    os.remove(svg_filename)
+    os.remove(png_filename)
+
+    assert png.size == png_size
+
+    return png
+
+
+class LImageCompositionResult(NamedTuple):
+    image: Image.Image # 合成結果
+    n_blended: int # 被ったピクセルの数
+
+
+def composite_L_images(images: Sequence[Image.Image]) -> LImageCompositionResult:
+    if len(images) == 0:
+        raise Exception()
+    
+    image_size = images[0].size
+    
+    image = Image.new("L", image_size)
+    sum_of_images = np.zeros(image_size, np.int32)
+    for i in range(len(images)):
+        if images[i].mode != "L":
+            raise Exception(f"images[{i}] is not L")
+        if images[i].size != image_size:
+            raise Exception(f"invalid image size: {images[i].size} at {i}, {image_size} at 0")
+        
+        image = ImageMath.eval("image | image_i", image=image, image_i=images[i]).convert("L")
+        assert isinstance(image, Image.Image)
+        sum_of_images += np.array(images[i]) > 0 # 適当
+
+    n_blended = np.count_nonzero(sum_of_images > 1)
+
+    return LImageCompositionResult(image=image, n_blended=n_blended)
+
+
+# I から L への変換がうまく動かない
+# https://github.com/python-pillow/Pillow/issues/3011
+def convert_to_L(image: Image.Image):
+    if image.mode == "L":
+        pass
+    elif image.mode == "RGB" or image.mode == "RGBA":
+        image = image.convert("L")
+    elif image.mode == "I":
+        image = ImageMath.eval("image >> 8", image=image).convert("L")
+        assert isinstance(image, Image.Image)
+    else:
+        raise Exception(f"unknown mode: {image.mode}")
+    assert image.mode == "L"
+    return image
 
 
 def create_vertical_stack_image(data_list: list[Union[str, list[Image.Image]]], gap, font: ImageFont.FreeTypeFont):

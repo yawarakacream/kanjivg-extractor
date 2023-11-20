@@ -10,6 +10,7 @@ import bs4
 from PIL import Image, ImageMath
 
 import config
+from utility import generate_image_from_svg, composite_L_images, convert_to_L
 
 
 @dataclass
@@ -62,50 +63,28 @@ class Kvg:
     def charcode(self):
         return self.kvgid.split("-")[0]
 
-    def draw(self, image_size: int, padding: int, stroke_width: float) -> list[tuple[Kvg, Image.Image]]:
+    def generate_image(self, image_size: int, padding: int, stroke_width: float) -> list[tuple[Kvg, Image.Image]]:
         image = Image.new("L", (image_size, image_size), 0)
         
         if len(self.svg):
-            tmp_filename = f"tmp_{uuid4()}"
-
             svg_paths = [f'<path stroke="white" stroke-width="{stroke_width * 109 / (image_size - padding * 2)}" fill="none" stroke-linecap="round" stroke-linejoin="round" d="{path}"/>' for path in self.svg]
             svg = f'<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="109" height="109" viewBox="0 0 109 109">{"".join(svg_paths)}</svg>'
 
-            svg_filename = f"{tmp_filename}.svg"
-            with open(svg_filename, "w") as f:
-                print(svg, file=f)
-
-            png_filename = f"{tmp_filename}.png"
-            subprocess.run([
-                "convert",
-                "-background", "black",
-                "-resize", f"{image_size - padding * 2}x{image_size - padding * 2}",
-                svg_filename, png_filename,
-            ])
+            image0 = generate_image_from_svg(
+                svg,
+                png_size=(image_size - padding * 2, image_size - padding * 2),
+                background="black"
+            )
+            image0 = convert_to_L(image0)
             
-            png = Image.open(png_filename)
-            if png.mode == "L":
-                pass
-            elif png.mode == "RGB" or png.mode == "RGBA":
-                png = png.convert("L")
-            elif png.mode == "I":
-                png = ImageMath.eval("image >> 8", image=png).convert("L")
-            else:
-                raise Exception(f"unknown mode: {png.mode} in {self.kvgid}")
-            assert png.mode == "L"
-            
-            image.paste(png, (padding, padding))
-            
-            os.remove(svg_filename)
-            os.remove(png_filename)
+            image.paste(image0, (padding, padding))
 
         images: list[tuple[Kvg, Image.Image]] = []
         for child in self.children:
-            child_images = child.draw(image_size=image_size, padding=padding, stroke_width=stroke_width)
+            child_images = child.generate_image(image_size=image_size, padding=padding, stroke_width=stroke_width)
             images += child_images
-            image = ImageMath.eval("image | child", image=image, child=child_images[0][1]).convert("L")
+            image = composite_L_images((image, child_images[0][1])).image
         
         images.insert(0, (self, image))
         
         return images
-    
