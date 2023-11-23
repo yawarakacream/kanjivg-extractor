@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
-import subprocess
 from dataclasses import dataclass
 from typing import Final, Optional
-from uuid import uuid4
 
 import bs4
-from PIL import Image, ImageMath
+from PIL import Image
 
 import config
 from utility import generate_image_from_svg, composite_L_images, convert_to_L
