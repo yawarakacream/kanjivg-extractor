@@ -7,7 +7,7 @@ import bs4
 from PIL import Image
 
 import config
-from utility import generate_image_from_svg, composite_L_images, convert_to_L
+from utility import generate_image_from_svg, compose_L_images, convert_to_L
 
 
 @dataclass
@@ -80,7 +80,7 @@ class Kvg:
         for child in self.children:
             child_images = child.generate_image(image_size=image_size, padding=padding, stroke_width=stroke_width)
             images += child_images
-            image = composite_L_images((image, child_images[0][1])).image
+            image = compose_L_images((image, child_images[0][1])).image
         
         images.insert(0, (self, image))
         
