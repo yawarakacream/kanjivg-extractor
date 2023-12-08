@@ -1,10 +1,11 @@
 import os
 import subprocess
-from typing import NamedTuple, Sequence, Union
+import tempfile
+from typing import NamedTuple, Sequence
 
 import numpy as np
 
-from PIL import Image, ImageDraw, ImageFont, ImageMath
+from PIL import Image, ImageMath
 
 
 def pathstr(*s: str) -> str:
@@ -16,27 +17,22 @@ def char2code(char):
 
 
 def generate_image_from_svg(svg: str, png_size: tuple[int, int], background: str):
-    from uuid import uuid4
+    with tempfile.TemporaryDirectory() as tmp_directory:
+        svg_filename = pathstr(tmp_directory, "image.svg")
+        png_filename = pathstr(tmp_directory, "image.png")
+        
+        with open(svg_filename, "w") as f:
+            print(svg, file=f)
 
-    tmp_filename = f"tmp_{uuid4()}"
-
-    svg_filename = f"{tmp_filename}.svg"
-    with open(svg_filename, "w") as f:
-        print(svg, file=f)
-
-    png_filename = f"{tmp_filename}.png"
-    subprocess.run([
-        "convert",
-        "-background", background,
-        "-resize", f"{png_size[0]}x{png_size[1]}",
-        svg_filename, png_filename,
-    ], check=True)
-    
-    with Image.open(png_filename) as png:
-        png = png.copy()
-    
-    os.remove(svg_filename)
-    os.remove(png_filename)
+        subprocess.run([
+            "convert",
+            "-background", background,
+            "-resize", f"{png_size[0]}x{png_size[1]}",
+            svg_filename, png_filename,
+        ], check=True)
+        
+        with Image.open(png_filename) as png:
+            png = png.copy()
 
     assert png.size == png_size
 
